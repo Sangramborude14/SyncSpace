@@ -1,0 +1,5 @@
+1. Added docker-compose
+2. Added core dependancies
+3. Added dev dependancies
+4. npx tsc --init
+5. Edited tsconfig.json

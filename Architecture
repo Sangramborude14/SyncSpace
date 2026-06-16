@@ -1,0 +1,86 @@
+State Management
+
+Tool Store
+{
+    selectedTool,
+    color,
+    strokeWidth
+}
+
+Board Store
+{
+    boardId,
+    elements,
+    selectElements,
+    zoom,
+    pan
+}
+
+Presence Store
+{
+    onlineUsers,
+    cursors
+}
+
+Canvas Architecture 
+|
+|== Stroke
+|== Rectangle
+|== Circle
+|== Arrow
+|== Text
+
+[
+    {
+        id: "1",
+        type: "rectangle",
+        x: 100,
+        y: 200,
+        width: 300,
+        height: 100,
+    }
+]
+
+DataBase Architecture
+
+User
+    {
+        id
+        name
+        email
+    }
+
+Board
+{
+    id
+    name
+    ownerId
+    createdAt
+}
+
+Element
+{
+    id
+    boardId
+    type
+    data
+}
+
+WebSocketArchitecture
+
+Client --> Server
+JOIN_BOARD
+LEAVE_BOARD
+DRAW
+MOVE_CURSOR
+UNDO
+REDO
+CLEAR_BOARD
+
+
+Server --> Client
+USER_JOINED
+USER_LEFT
+ELEMENT_CREATED
+CURSOR_MOVED
+BOARD_CLEARED
