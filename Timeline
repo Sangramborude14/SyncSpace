@@ -3,3 +3,7 @@
 3. Added dev dependancies
 4. npx tsc --init
 5. Edited tsconfig.json
+6. npx prisma init
+7. Created schema for db
+8. npx prisma migrate dev --name init
+9. created index.ts
