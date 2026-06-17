@@ -9,4 +9,8 @@
 9. created index.ts,logger and db client
 10. Added start/dev scripts to package.json
 11. Initalized Next.js frontend
+12. Created Tool Store
+13. Created Board Store
+14. Created Presence Store
+15. Set up Socket.io client instance
 
