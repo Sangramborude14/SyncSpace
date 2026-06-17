@@ -6,4 +6,7 @@
 6. npx prisma init
 7. Created schema for db
 8. npx prisma migrate dev --name init
-9. created index.ts
+9. created index.ts,logger and db client
+10. Added start/dev scripts to package.json
+11. Initalized Next.js frontend
+
