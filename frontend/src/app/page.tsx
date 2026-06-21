@@ -32,7 +32,7 @@ export default function Home() {
       setError('Please enter a Board ID')
       return;
     }
-    router.push(`/board/${boardIdInput.trim()}name=${encodeURIComponent(name.trim())}`)
+    router.push(`/board/${boardIdInput.trim()}?name=${encodeURIComponent(name.trim())}`)
   };
 
   return(

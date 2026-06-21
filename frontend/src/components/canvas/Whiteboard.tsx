@@ -17,6 +17,9 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing,setIsDrawing] = useState(false);
     const [currentElement, setCurrentElement] = useState<CanvasElement | null>(null);
+    const [isSpacePressed, setIsSpacePressed] = useState(false);
+    const [isPanning, setIsPanning] = useState(false);
+    const [lastPanOffset, setLastPanOffset] = useState<Point>({x: 0, y: 0});
 
     const {
         selectedTool,
@@ -51,6 +54,65 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
         clearPresence,
 
     } = usePresenceStore();
+
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if(e.code === 'Space' && !isSpacePressed){
+          e.preventDefault();
+          setIsSpacePressed(true);
+        }
+      };
+
+      const handleKeyUp = (e: KeyboardEvent) => {
+        if(e.code === 'Space'){
+          setIsSpacePressed(false);
+        }
+      };
+
+      window.addEventListener('keydown',handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+      
+      return () => {
+        window.removeEventListener('keydown',handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+      };
+
+    }, [isSpacePressed])
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if(!canvas) return;
+
+      const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const canvasX = (mouseX - pan.x) / zoom;
+        const canvasY = (mouseY - pan.y) / zoom;
+
+        const zoomFactor = 1.1;
+        let newZoom = zoom;
+
+        if(e.deltaY < 0){
+          newZoom = Math.min(zoom * zoomFactor, 10);
+        }else{
+          newZoom = Math.max(zoom / zoomFactor, 0.1);
+        }
+
+        const newPanX = mouseX - canvasX * newZoom;
+        const newPanY = mouseY - canvasY * newZoom;
+
+        setZoom(newZoom);
+        setPan({x: newPanX, y: newPanY})
+      }
+      canvas.addEventListener('wheel',handleWheel,{passive: false})
+      return () => {
+        canvas.removeEventListener('wheel',handleWheel);
+      }
+    },[zoom,pan,setZoom,setPan])
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -146,6 +208,13 @@ const getCanvasCoords = (clientX: number, clientY: number): Point => {
  
 //drawing event handler
 const handleMouseDown = (e: React.MouseEvent) => {
+
+    if(isSpacePressed) {
+      setIsPanning(true);
+      setLastPanOffset({x: e.clientX, y: e.clientY});
+      return;
+    }
+
     if(selectedTool === 'select') return;
 
     setIsDrawing(true);
@@ -169,10 +238,38 @@ const handleMouseDown = (e: React.MouseEvent) => {
             socket.emit('DRAW', {boardId,element: textElement});
         }
         setIsDrawing(false);
+    }else{
+
+      //Initalize drawing for shapes and pencil lines
+      const newElement: CanvasElement = {
+        id: elementId,
+        type: selectedTool,
+        x: coords.x,
+        y: coords.y,
+        width: 0,
+        height: 0,
+        points: selectedTool === 'pencil' ? [coords] :  undefined,
+        color,
+        strokeWidth,
+      };
+      setCurrentElement(newElement)
     }
 }
 
 const handleMouseMove = (e: React.MouseEvent) => {
+
+    if(isPanning){
+      const dx = e.clientX - lastPanOffset.x;
+      const dy = e.clientY - lastPanOffset.y;
+
+      setPan({
+        x: pan.x + dx,
+        y: pan.y + dy
+      })
+      setLastPanOffset({x:e.clientX, y:e.clientY})
+      return;
+    }
+
     const coords = getCanvasCoords(e.clientX, e.clientY);
 
     socket.emit('MOVE_CURSOR',{boardId,position: coords});
@@ -197,6 +294,12 @@ const handleMouseMove = (e: React.MouseEvent) => {
 }
 
 const handleMouseUp = (e: React.MouseEvent) => {
+
+  if(isPanning){
+    setIsPanning(false);
+    return;
+  }
+
     if(!isDrawing || ! currentElement) return;
     setIsDrawing(false);
     

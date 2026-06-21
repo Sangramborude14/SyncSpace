@@ -1,6 +1,6 @@
 import {create} from 'zustand';
 
-export type DrawingTool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'arrow' | 'text';
+export type DrawingTool =  'select' | 'pencil' | 'rectangle' | 'circle' | 'arrow' | 'text';
 
 interface ToolState {
     selectedTool: DrawingTool;

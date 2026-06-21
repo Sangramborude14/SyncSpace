@@ -40,7 +40,7 @@ interface BoardState {
     redo: () => void;
     }
 
-export const useBoardState = create<BoardState>((set,get) => ({
+export const useBoardStore = create<BoardState>((set,get) => ({
     boardId: null,
     elements: [],
     selectedElementIds: [],

@@ -61,7 +61,7 @@ export const drawElement = (ctx:CanvasRenderingContext2D, element: CanvasElement
         case 'text':
             if(!element.text)return;
             ctx.fillStyle  = element.color;
-            ctx.font = `${element.strokeWidth*4 + 16}px sans-sarif`;
+            ctx.font = `${element.strokeWidth*4 + 16}px sans-serif`;
             ctx.fillText(element.text,element.x,element.y);
             break;
     }
