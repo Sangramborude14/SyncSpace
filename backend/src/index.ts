@@ -1,12 +1,13 @@
+import dotenv from 'dotenv'
+dotenv.config();
 import express from 'express'
 import { createServer} from 'http';
 import { Server} from 'socket.io';
 import cors from 'cors';
-import dotenv from 'dotenv'
-import {logger} from './utils/logger.js'
-import {prisma} from './lib/db.js'
+import {logger} from './utils/logger'
+import {prisma} from './lib/db'
 
-dotenv.config();
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -120,13 +121,17 @@ io.on('connection', (socket) => {
         try {
 
             //save the drawn element to db
-            await prisma.element.create({
-                data: {
-                    id: element.id,
-                    boardId: boardId,
-                    type: element.type,
-                    data: element,
-                }
+            await prisma.element.upsert({
+               where: {id: element.id},
+               create: {
+                id: element.id,
+                boardId: boardId,
+                type: element.type,
+                data: element,
+               },
+               update: {
+                data: element,
+               }
             });
 
             // Broadcast drawing events to all other clients in the room
@@ -156,6 +161,19 @@ io.on('connection', (socket) => {
             socket.to(boardId).emit('BOARD_CLEARED')
         } catch(err) {
             logger.error({ err, boardId}, `Error in CLEAR_BOARD`)
+        }
+    })
+
+    socket.on('UNDO', async ({ boardId, elementId}) => {
+        try {
+             // Delete the undone element
+             await prisma.element.delete({
+                where: {id: elementId}
+             });
+
+             socket.to(boardId).emit('ELEMENT_UNDONE', { elementId });
+        }catch(err){
+            logger.error({err,boardId,elementId}, `Error in UNDO`)
         }
     })
 

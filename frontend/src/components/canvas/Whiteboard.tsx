@@ -20,6 +20,9 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
     const [lastPanOffset, setLastPanOffset] = useState<Point>({x: 0, y: 0});
+    const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null);
+    const [isDraggingElement, setIsDraggingElement] = useState(false);
+    const [dragStartOffset, setDragStartOffset] = useState<Point>({x: 0, y: 0});
 
     const {
         selectedTool,
@@ -34,6 +37,8 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
     const {
         elements,
         addElement,
+        deleteElement,
+        updateElement,
         setElements,
         clearBoard,
         undo,
@@ -42,6 +47,8 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
         pan,
         setZoom,
         setPan,
+        history,
+        historyIndex,
 
     } = useBoardStore();
 
@@ -172,7 +179,17 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
         })
 
         socket.on('ELEMENT_CREATED', ({ element }) => {
-            addElement(element);
+           const exists = useBoardStore.getState().elements.some(el => el.id === element.id);
+
+           if(exists){
+            updateElement(element.id,element);
+           }else{
+             addElement(element);
+           }
+        })
+
+        socket.on('ELEMENT_UNDONE',({elementId}) => {
+          deleteElement(elementId);
         })
 
         socket.on('CURSOR_MOVED',({userId, position}) => {
@@ -189,6 +206,7 @@ export default function Whiteboard({boardId,username}: WhiteboardProps){
             socket.off('USER_JOINED')
             socket.off('USER_LEFT')
             socket.off('ELEMENT_CREATED')
+            socket.off('ELEMENT_UNDONE')
             socket.off('CURSOR_MOVED')
             socket.off('BOARD_CLEARED');
             clearPresence();
@@ -215,11 +233,19 @@ const handleMouseDown = (e: React.MouseEvent) => {
       return;
     }
 
-    if(selectedTool === 'select') return;
+    const coords = getCanvasCoords(e.clientX, e.clientY);
+    if(selectedTool === 'select') {
+      const clickedElement = getElementAtPosition(coords.x,coords.y,elements);
+
+      if(clickedElement){
+        setSelectedElement(clickedElement);
+        setIsDraggingElement(true);
+        setLastPanOffset(coords);
+      }
+      return;
+    };
 
     setIsDrawing(true);
-
-    const coords = getCanvasCoords(e.clientX, e.clientY);
     const elementId = Math.random().toString(36).substring(2,9);
 
     if(selectedTool === 'text'){
@@ -271,8 +297,31 @@ const handleMouseMove = (e: React.MouseEvent) => {
     }
 
     const coords = getCanvasCoords(e.clientX, e.clientY);
-
     socket.emit('MOVE_CURSOR',{boardId,position: coords});
+
+    if(selectedTool === 'select' && isDraggingElement && selectedElement){
+      const dx = coords.x - lastPanOffset.x;
+      const dy = coords.y - lastPanOffset.y;
+
+      const updatedElement: CanvasElement = {
+        ...selectedElement,
+        x: selectedElement.x + dx,
+        y: selectedElement.y + dy,
+        points: selectedElement.points ? selectedElement.points.map((p) => ({
+          x: p.x + dx,
+          y: p.y + dy
+        })) : undefined,
+      }
+
+      updateElement(selectedElement.id, updatedElement);
+      setSelectedElement(updatedElement);
+      setLastPanOffset(coords);
+
+      socket.emit('DRAW', {boardId,element: updatedElement});
+      return;
+
+    }
+
 
     if(!isDrawing || !currentElement) return;
     
@@ -300,6 +349,12 @@ const handleMouseUp = (e: React.MouseEvent) => {
     return;
   }
 
+  if(selectedTool === 'select'){
+    setIsDraggingElement(false);
+    setSelectedElement(null);
+    return;
+  }
+
     if(!isDrawing || ! currentElement) return;
     setIsDrawing(false);
     
@@ -308,6 +363,24 @@ const handleMouseUp = (e: React.MouseEvent) => {
     socket.emit('DRAW', {boardId,element: currentElement});
     setCurrentElement(null);
 };
+
+const handleUndo = () => {
+  if(elements.length === 0) return;
+  const lastElement = elements[elements.length - 1];
+  socket.emit('UNDO', {boardId, elementId: lastElement.id})
+  undo();
+}
+
+const handleRedo = () => {
+  if(historyIndex < history.length - 1){
+    const nextElements = history[historyIndex + 1];
+    const restoredElement = nextElements[nextElements.length - 1];
+    if(restoredElement){
+      redo();
+      socket.emit('DRAW',{boardId,element: restoredElement})
+    }
+  }
+}
 
 const handleClear = () => {
     clearBoard();
@@ -351,7 +424,7 @@ return (
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1 px-1">
               Tools
             </span>
-            {(['pencil', 'rectangle', 'circle', 'arrow', 'text'] as DrawingTool[]).map((t) => (
+            {(['select','pencil', 'rectangle', 'circle', 'arrow', 'text'] as DrawingTool[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setSelectedTool(t)}
@@ -410,13 +483,13 @@ return (
         {/* Bottom Actions Toolbar */}
         <div className="absolute bottom-4 left-4 z-20 flex gap-2 rounded-md border border-zinc-200 bg-white p-1.5 shadow-sm">
           <button
-            onClick={undo}
+            onClick={handleUndo}
             className="rounded px-2.5 py-1 text-xs font-medium text-zinc-650 hover:bg-zinc-100 cursor-pointer"
           >
             Undo
           </button>
           <button
-            onClick={redo}
+            onClick={handleRedo}
             className="rounded px-2.5 py-1 text-xs font-medium text-zinc-650 hover:bg-zinc-100 cursor-pointer"
           >
             Redo
@@ -468,4 +541,84 @@ return (
     </div>
 )
 }
+
+// Helper: Check if mouse point (px, py) is near line segment (x1, y1) to (x2, y2)
+const isPointNearLine = (x1: number, y1: number, x2: number, y2: number, px: number, py: number, maxDistance = 8): boolean => {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy) < maxDistance;
+};
+
+// Helper: Determine which element is under the cursor (topmost first)
+const getElementAtPosition = (x: number, y: number, elements: CanvasElement[]): CanvasElement | null => {
+    for (let i = elements.length - 1; i >= 0; i--) {
+        const el = elements[i];
+        
+        if (el.type === 'rectangle') {
+            if (el.width === undefined || el.height === undefined) continue;
+            const minX = Math.min(el.x, el.x + el.width);
+            const maxX = Math.max(el.x, el.x + el.width);
+            const minY = Math.min(el.y, el.y + el.height);
+            const maxY = Math.max(el.y, el.y + el.height);
+            
+            if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+                return el;
+            }
+        } else if (el.type === 'circle') {
+            if (el.width === undefined || el.height === undefined) continue;
+            const radius = Math.sqrt(el.width ** 2 + el.height ** 2) / 2;
+            const centerX = el.x + el.width / 2;
+            const centerY = el.y + el.height / 2;
+            const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+            if (dist <= radius + 5) {
+                return el;
+            }
+        } else if (el.type === 'pencil') {
+            if (!el.points) continue;
+            for (let j = 0; j < el.points.length - 1; j++) {
+                const p1 = el.points[j];
+                const p2 = el.points[j + 1];
+                if (isPointNearLine(p1.x, p1.y, p2.x, p2.y, x, y)) {
+                    return el;
+                }
+            }
+        } else if (el.type === 'arrow') {
+            if (el.width === undefined || el.height === undefined) continue;
+            if (isPointNearLine(el.x, el.y, el.x + el.width, el.y + el.height, x, y)) {
+                return el;
+            }
+        } else if (el.type === 'text') {
+            const textWidth = el.text ? el.text.length * (el.strokeWidth * 2 + 10) : 50;
+            const textHeight = el.strokeWidth * 4 + 20;
+            if (x >= el.x && x <= el.x + textWidth && y >= el.y - textHeight && y <= el.y) {
+                return el;
+            }
+        }
+    }
+    return null;
+};
+
 
