@@ -17,5 +17,6 @@
 17. Created HomePage
 18. Created WhiteBoard
 19. Added Zoom and Pan Function
-20. Added Select Button
-
+20. Added Select and Move Function
+21. Added Synced Undo and Redo Function
+22. Added Dockerfiles, Docker Compose configuration, and GitHub Actions CI/CD Pipeline
