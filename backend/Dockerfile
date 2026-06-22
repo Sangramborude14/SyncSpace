@@ -21,7 +21,7 @@ COPY prisma ./prisma/
 RUN npm ci --only=production
 
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/src/generated ./src/generated
+
 
 EXPOSE 5000
 
